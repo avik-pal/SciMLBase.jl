@@ -1,5 +1,5 @@
 """
-`SciML.ReturnCode`
+    SciML.ReturnCode
 
 `SciML.ReturnCode` is the standard return code enum interface for the SciML interface.
 Return codes are notes given by the solvers to indicate the state of the solution, for
@@ -16,8 +16,7 @@ referred to via `getproperty`, i.e. `SciML.ReturnCode.Success`.
 ## Note About Success Checking
 
 Previous iterations of the interface suggested using `sol.retcode == :Success`, however,
-that is now not advised instead should be replaced with `
-SciMLBase.successful_retcode(sol)`. The reason is that there are many different
+that is now not advised instead should be replaced with ` SciMLBase.successful_retcode(sol)`. The reason is that there are many different
 codes that can be interpreted as successful, such as `ReturnCode.Terminated` which means
 successfully used `terminate!(integrator)` to end an integration at a user-specified
 condition. As such, `successful_retcode` is the most general way to query for if the solver
@@ -25,14 +24,14 @@ did not error.
 
 ## Properties
 
-* `successful_retcode(retcode::ReturnCode.T)`: Determines whether the output enum is
-  considered a success state of the solver, i.e. the solver successfully solved the
-  equations. `ReturnCode.Success` is the most basic form, simply declaring that it was
-  successful, but many more informative success return codes exist as well.
+  - `successful_retcode(retcode::ReturnCode.T)`: Determines whether the output enum is
+    considered a success state of the solver, i.e. the solver successfully solved the
+    equations. `ReturnCode.Success` is the most basic form, simply declaring that it was
+    successful, but many more informative success return codes exist as well.
 """
 EnumX.@enumx ReturnCode begin
     """
-    `ReturnCode.Default`
+        ReturnCode.Default
 
     The default state of the solver. If this return code is given, then the solving
     process is either still in process or the solver library has not been setup
@@ -40,39 +39,39 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * A common reason for `Default` return codes is that a solver is a non-SciML solver
-      which does not fully conform to the interface. Please open an issue if this is seen
-      and it will be improved.
-    * Another common reason for a `Default` return code is if the solver is probed
-      internally before the solving process is done, such as through the callback interface.
-      Return codes are set to `Default` to start and are changed to `Success` and other
-      return codes upon finishing the solving process or hitting a numerical difficulty.
+      - A common reason for `Default` return codes is that a solver is a non-SciML solver
+        which does not fully conform to the interface. Please open an issue if this is seen
+        and it will be improved.
+      - Another common reason for a `Default` return code is if the solver is probed
+        internally before the solving process is done, such as through the callback interface.
+        Return codes are set to `Default` to start and are changed to `Success` and other
+        return codes upon finishing the solving process or hitting a numerical difficulty.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     Default
 
     """
-    `ReturnCode.Success`
+        ReturnCode.Success
 
     The success state of the solver. If this return code is given, then the solving
     process was successful, but no extra information about that success is given.
 
     ## Common Reasons for Seeing this Return Code
 
-    * This is the most common return code and most solvers will give this return code if
-      the solving process went as expected without any errors or detected numerical issues.
+      - This is the most common return code and most solvers will give this return code if
+        the solving process went as expected without any errors or detected numerical issues.
 
     ## Properties
 
-    * successful_retcode = true
+      - `successful_retcode` = `true`
     """
     Success
 
     """
-    `ReturnCode.Terminated`
+        ReturnCode.Terminated
 
     The successful termination state of the solver. If this return code is given,
     then the solving process was successful at terminating the solve, usually
@@ -80,23 +79,23 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is if a user calls a callback which
-      uses `terminate!(integrator)` to halt the integration at a user-chosen stopping point.
-    * Another common reason for this return code is due to implicit `terminate!` statements
-      in some library callbacks. For example, `SteadyStateCallback` uses `terminate!`
-      internally, so solutions which reach steady state will have a `ReturnCode.Terminated`
-      state instead of a `ReturnCode.Success` state. Similarly, problems solved via
-      SteadyStateDiffEq.jl will have this `ReturnCode.Terminated` state if a timestepping
-      method is used to solve to steady state.
+      - The most common reason for seeing this return code is if a user calls a callback which
+        uses `terminate!(integrator)` to halt the integration at a user-chosen stopping point.
+      - Another common reason for this return code is due to implicit `terminate!` statements
+        in some library callbacks. For example, `SteadyStateCallback` uses `terminate!`
+        internally, so solutions which reach steady state will have a `ReturnCode.Terminated`
+        state instead of a `ReturnCode.Success` state. Similarly, problems solved via
+        SteadyStateDiffEq.jl will have this `ReturnCode.Terminated` state if a timestepping
+        method is used to solve to steady state.
 
     ## Properties
 
-    * successful_retcode = true
+      - `successful_retcode` = `true`
     """
     Terminated
 
     """
-    `ReturnCode.DtNaN`
+        ReturnCode.DtNaN
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful and exited early because the `dt` of the
@@ -104,22 +103,22 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because the automatic `dt`
-      selection algorithm is used but the starting derivative has a `NaN` or `Inf`
-      derivative term. Double check that the `f(u0,p,t0)` term is well-defined without
-      `NaN` or `Inf` values.
-    * Another common reason for this return code is because of a user set `dt` which is
-      calculated to be a `NaN`. If `solve(prob,alg,dt=x)`, double check that `x` is not
-      `NaN`.
+      - The most common reason for seeing this return code is because the automatic `dt`
+        selection algorithm is used but the starting derivative has a `NaN` or `Inf`
+        derivative term. Double check that the `f(u0,p,t0)` term is well-defined without
+        `NaN` or `Inf` values.
+      - Another common reason for this return code is because of a user set `dt` which is
+        calculated to be a `NaN`. If `solve(prob,alg,dt=x)`, double check that `x` is not
+        `NaN`.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     DtNaN
 
     """
-    `ReturnCode.MaxIters`
+        ReturnCode.MaxIters
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful and exited early because the solver's
@@ -137,21 +136,41 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * This commonly occurs in ODE solving if a non-stiff method (e.g. `Tsit5`) is used in
-      an algorithm choice for a stiff ODE. It is recommended that in such cases, one tries a
-      stiff ODE solver.
-    * This commonly occurs in optimization and nonlinear solvers if the tolerance on `solve`
-      to too low and cannot be achieved due to floating point error or the condition number
-      of the solver matrix. Double check that the chosen tolerance is numerically possible.
+      - This commonly occurs in ODE solving if a non-stiff method (e.g. `Tsit5`) is used in
+        an algorithm choice for a stiff ODE. It is recommended that in such cases, one tries a
+        stiff ODE solver.
+      - This commonly occurs in optimization and nonlinear solvers if the tolerance on `solve`
+        to too low and cannot be achieved due to floating point error or the condition number
+        of the solver matrix. Double check that the chosen tolerance is numerically possible.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     MaxIters
 
     """
-    `ReturnCode.DtLessThanMin`
+        ReturnCode.MaxNumSub
+
+    A failure exit state of the solver. If this return code is given, then the
+    solving process was unsuccessful and exited early because during the solver's
+    adaptivity, mesh length exceeded the `max_num_subintervals` either set by default or specified
+    by users in the solver.
+
+    ## Common Reasons for Seeing this Return Code
+
+      - This commonly occurs in BVP solving if the original mesh are too coarse or
+        the tolerance are too stringent. It is recommended that in such cases, one tries to increase the default `max_num_subintervals`
+        in solvers, or decrease the tolerance.
+
+    ## Properties
+
+      - `successful_retcode` = `false`
+    """
+    MaxNumSub
+
+    """
+        ReturnCode.DtLessThanMin
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful and exited early because the `dt` of the
@@ -159,29 +178,29 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because the integration
-      is going unstable. As `f(u,p,t) -> infinity`, the time steps required by the solver
-      to accurately handle the dynamics decreases. When it gets sufficiently small, `dtmin`,
-      an exit is thrown as the solution is likely unstable. `dtmin` is also chosen to be
-      around the value where floating point issues cause `t + dt == t`, and thus a `dt`
-      of that size is impossible at floating point precision.
-    * Another common reason for this return code is if domain constraints are set, such as
-      by using `isoutofdomain`, but the domain constraint is incorrect. For example, if
-      one is solving the ODE `f(u,p,t) = -u - 1`, one may think "but I want a solution with
-      `u > 0` and thus I will set `isoutofdomain(u,p,t) = u < 0`. However, the true solution
-      of this ODE is not positive, and thus what will occur is that the solver will try to
-      decrease `dt` until it can give an accurate solution that is positive. As this is
-      impossible, it will continue to shrink the `dt` until `dt < dtmin` and then exit with
-      this return code.
+      - The most common reason for seeing this return code is because the integration
+        is going unstable. As `f(u,p,t) -> infinity`, the time steps required by the solver
+        to accurately handle the dynamics decreases. When it gets sufficiently small, `dtmin`,
+        an exit is thrown as the solution is likely unstable. `dtmin` is also chosen to be
+        around the value where floating point issues cause `t + dt == t`, and thus a `dt`
+        of that size is impossible at floating point precision.
+      - Another common reason for this return code is if domain constraints are set, such as
+        by using `isoutofdomain`, but the domain constraint is incorrect. For example, if
+        one is solving the ODE `f(u,p,t) = -u - 1`, one may think "but I want a solution with
+        `u > 0` and thus I will set `isoutofdomain(u,p,t) = u < 0`. However, the true solution
+        of this ODE is not positive, and thus what will occur is that the solver will try to
+        decrease `dt` until it can give an accurate solution that is positive. As this is
+        impossible, it will continue to shrink the `dt` until `dt < dtmin` and then exit with
+        this return code.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     DtLessThanMin
 
     """
-    `ReturnCode.Unstable`
+        ReturnCode.Unstable
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful and exited early because the `unstable_check`
@@ -190,42 +209,42 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because `u` contains a `NaN`
-      or `Inf` value. The default `unstable_check` only checks for these values.
+      - The most common reason for seeing this return code is because `u` contains a `NaN`
+        or `Inf` value. The default `unstable_check` only checks for these values.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     Unstable
 
     """
-    `ReturnCode.InitialFailure`
+        ReturnCode.InitialFailure
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful because the initialization process failed.
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because the initialization
-      process of a DAE solver failed to find consistent initial conditions, which can
-      occur if the differentiation index of the DAE solver is too high. Most DAE solvers
-      only allow for index-1 DAEs, and so an index-2 DAE will fail during this
-      initialization. To solve this kind of problem, use `ModelingToolkit.jl` and its
-      `structural_simplify` method to reduce the index of the DAE.
-    * Another common reason for this return code is if the initial condition was not
-      suitable for the numerical solve. For example, the initial point had a `NaN` or `Inf`.
-      Or in optimization, this can occur if the initial point is outside of the bound
-      constraints given by the user.
+      - The most common reason for seeing this return code is because the initialization
+        process of a DAE solver failed to find consistent initial conditions, which can
+        occur if the differentiation index of the DAE solver is too high. Most DAE solvers
+        only allow for index-1 DAEs, and so an index-2 DAE will fail during this
+        initialization. To solve this kind of problem, use `ModelingToolkit.jl` and its
+        `structural_simplify` method to reduce the index of the DAE.
+      - Another common reason for this return code is if the initial condition was not
+        suitable for the numerical solve. For example, the initial point had a `NaN` or `Inf`.
+        Or in optimization, this can occur if the initial point is outside of the bound
+        constraints given by the user.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     InitialFailure
 
     """
-    `ReturnCode.ConvergenceFailure`
+        ReturnCode.ConvergenceFailure
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful because internal nonlinear solver iterations
@@ -233,105 +252,108 @@ EnumX.@enumx ReturnCode begin
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because an inappropriate
-      nonlinear solver was chosen. If fixed point iteration is used on a stiff problem,
-      it will be faster by avoiding the Jacobian but it will make a stiff ODE solver not
-      stable for stiff problems!
+      - The most common reason for seeing this return code is because an inappropriate
+        nonlinear solver was chosen. If fixed point iteration is used on a stiff problem,
+        it will be faster by avoiding the Jacobian but it will make a stiff ODE solver not
+        stable for stiff problems!
+      - For nonlinear solvers, this can occur if certain threshold was exceeded. For example,
+        in approximate jacobian solvers like Broyden, Klement, etc. if the number of jacobian
+        resets exceeds the threshold, then this return code is given.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     ConvergenceFailure
 
     """
-    `ReturnCode.Failure`
+        ReturnCode.Failure
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful but no extra information is given.
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for seeing this return code is because the solver is a wrapped
-      solver (i.e. a Fortran code) which does not provide any extra information about its
-      exit state. If this is from a Julia-based solver, please open an issue.
+      - The most common reason for seeing this return code is because the solver is a wrapped
+        solver (i.e. a Fortran code) which does not provide any extra information about its
+        exit state. If this is from a Julia-based solver, please open an issue.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     Failure
 
     """
-    `ReturnCode.ExactSolutionLeft`
+        ReturnCode.ExactSolutionLeft
 
     The success state of the solver. If this return code is given, then the solving
     process was successful, and the left solution was given.
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for this return code is via a bracketing nonlinear solver,
-      such as bisection, iterating to convergence is unable to give the exact `f(x)=0`
-      solution due to floating point precision issues, and thus it gives the first floating
-      point value to the left for `x`.
+      - The most common reason for this return code is via a bracketing nonlinear solver,
+        such as bisection, iterating to convergence is unable to give the exact `f(x)=0`
+        solution due to floating point precision issues, and thus it gives the first floating
+        point value to the left for `x`.
 
     ## Properties
 
-    * successful_retcode = true
+      - `successful_retcode` = `true`
     """
     ExactSolutionLeft
 
     """
-    `ReturnCode.ExactSolutionRight`
+        ReturnCode.ExactSolutionRight
 
     The success state of the solver. If this return code is given, then the solving
     process was successful, and the right solution was given.
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for this return code is via a bracketing nonlinear solver,
-      such as bisection, iterating to convergence is unable to give the exact `f(x)=0`
-      solution due to floating point precision issues, and thus it gives the first floating
-      point value to the right for `x`.
+      - The most common reason for this return code is via a bracketing nonlinear solver,
+        such as bisection, iterating to convergence is unable to give the exact `f(x)=0`
+        solution due to floating point precision issues, and thus it gives the first floating
+        point value to the right for `x`.
 
     ## Properties
 
-    * successful_retcode = true
+      - `successful_retcode` = `true`
     """
     ExactSolutionRight
 
     """
-    `ReturnCode.FloatingPointLimit`
+        ReturnCode.FloatingPointLimit
 
     The success state of the solver. If this return code is given, then the solving
     process was successful, and the closest floating point value to the solution was given.
 
     ## Common Reasons for Seeing this Return Code
 
-    * The most common reason for this return code is via a nonlinear solver, such as Falsi,
-    iterating to convergence is unable to give the exact `f(x)=0` solution due to floating
-    point precision issues, and thus it gives the closest floating point value to the
-    true solution for `x`.
+      - The most common reason for this return code is via a nonlinear solver, such as Falsi,
+        iterating to convergence is unable to give the exact `f(x)=0` solution due to floating
+        point precision issues, and thus it gives the closest floating point value to the
+        true solution for `x`.
 
     ## Properties
 
-    * successful_retcode = true
+      - `successful_retcode` = `true`
     """
     FloatingPointLimit
 
     """
-    `ReturnCode.Infeasible`
+        ReturnCode.Infeasible
 
     The optimization problem was proven to be infeasible by the solver.
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     Infeasible
 
     """
-    `ReturnCode.MaxTime`
+        ReturnCode.MaxTime
 
     A failure exit state of the solver. If this return code is given, then the
     solving process was unsuccessful and exited early because the solver's
@@ -340,9 +362,61 @@ EnumX.@enumx ReturnCode begin
 
     ## Properties
 
-    * successful_retcode = false
+      - `successful_retcode` = `false`
     """
     MaxTime
+
+    """
+        ReturnCode.InternalLineSearchFailed
+
+    Internal Line Search used by the algorithm has failed.
+
+    ## Properties
+
+      - `successful_retcode` = `false`
+    """
+    InternalLineSearchFailed
+
+    """
+        ReturnCode.ShrinkThresholdExceeded
+
+    The trust region radius was shrunk more times than the provided threshold.
+
+    ## Properties
+
+      - `successful_retcode` = `false`
+    """
+    ShrinkThresholdExceeded
+
+    """
+        ReturnCode.Stalled
+
+    The solution has stalled. This is only returned by algorithms for which stalling is a
+    failure mode. Certain solvers like Nonlinear Least Squares solvers are considered
+    successful if the solution has stalled, in those cases `ReturnCode.Success` is returned.
+
+    ## Properties
+
+      - `successful_retcode` = `false`
+    """
+    Stalled
+
+    """
+        ReturnCode.InternalLinearSolveFailed
+
+    The linear problem inside another problem (for example inside a NonlinearProblem)
+    could not be solved.
+
+    ## Common Reasons for Seeing this Return Code
+
+      - If a rank-deficient matrix originated inside the nonlinear solve and the
+        provided linear solver is incapable of handling those cases.
+
+    ## Properties
+
+      - `successful_retcode` = `false`
+    """
+    InternalLinearSolveFailed
 end
 
 Base.:(!=)(retcode::ReturnCode.T, s::Symbol) = Symbol(retcode) != s
@@ -351,7 +425,7 @@ const symtrue = Symbol("true")
 const symfalse = Symbol("false")
 
 function Base.convert(::Type{ReturnCode.T}, retcode::Symbol)
-    @warn "Backwards compatability support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information"
+    @warn "Backwards compatibility support of the new return codes to Symbols will be deprecated with the Julia v1.9 release. Please see https://docs.sciml.ai/SciMLBase/stable/interfaces/Solutions/#retcodes for more information"
 
     if retcode == :Default || retcode == :DEFAULT
         ReturnCode.Default
@@ -363,6 +437,8 @@ function Base.convert(::Type{ReturnCode.T}, retcode::Symbol)
         ReturnCode.Terminated
     elseif retcode == :MaxIters || retcode == :MAXITERS_EXCEED
         ReturnCode.MaxIters
+    elseif retcode == :MaxNumSub
+        ReturnCode.MaxNumSub
     elseif retcode == :MaxTime || retcode == :TIME_LIMIT
         ReturnCode.MaxTime
     elseif retcode == :DtLessThanMin
@@ -423,8 +499,8 @@ function Base.convert(::Type{ReturnCode.T}, bool::Bool)
 end
 
 """
-`successful_retcode(retcode::ReturnCode.T)::Bool`
-`successful_retcode(sol::AbstractSciMLSolution)::Bool`
+    successful_retcode(retcode::ReturnCode.T)::Bool
+    successful_retcode(sol::AbstractSciMLSolution)::Bool
 
 Returns a boolean for whether a return code should be interpreted as a form of success.
 """
