@@ -6,7 +6,7 @@ struct StandardDDEProblem end
 @doc doc"""
 
 Defines a delay differential equation (DDE) problem.
-Documentation Page: https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/
+Documentation Page: [https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/)
 
 ## Mathematical Specification of a DDE Problem
 
@@ -216,19 +216,21 @@ struct DDEProblem{uType, tType, lType, lType2, isinplace, P, F, H, K, PT} <:
     problem_type::PT
 
     @add_kwonly function DDEProblem{iip}(f::AbstractDDEFunction{iip}, u0, h, tspan,
-        p = NullParameters();
-        constant_lags = (),
-        dependent_lags = (),
-        neutral = f.mass_matrix !== I &&
-                  det(f.mass_matrix) != 1,
-        order_discontinuity_t0 = 0,
-        problem_type = StandardDDEProblem(),
-        kwargs...) where {iip}
+            p = NullParameters();
+            constant_lags = (),
+            dependent_lags = (),
+            neutral = f.mass_matrix !== I &&
+                      det(f.mass_matrix) != 1,
+            order_discontinuity_t0 = 0,
+            problem_type = StandardDDEProblem(),
+            kwargs...) where {iip}
+        _u0 = prepare_initial_state(u0)
         _tspan = promote_tspan(tspan)
         warn_paramtype(p)
-        new{typeof(u0), typeof(_tspan), typeof(constant_lags), typeof(dependent_lags),
+        new{typeof(_u0), typeof(_tspan), typeof(constant_lags), typeof(dependent_lags),
             isinplace(f),
-            typeof(p), typeof(f), typeof(h), typeof(kwargs), typeof(problem_type)}(f, u0, h,
+            typeof(p), typeof(f), typeof(h), typeof(kwargs), typeof(problem_type)}(f, _u0,
+            h,
             _tspan,
             p,
             constant_lags,
@@ -240,8 +242,8 @@ struct DDEProblem{uType, tType, lType, lType2, isinplace, P, F, H, K, PT} <:
     end
 
     function DDEProblem{iip}(f::AbstractDDEFunction{iip}, h, tspan::Tuple,
-        p = NullParameters();
-        order_discontinuity_t0 = 1, kwargs...) where {iip}
+            p = NullParameters();
+            order_discontinuity_t0 = 1, kwargs...) where {iip}
         DDEProblem{iip}(f, h(p, first(tspan)), h, tspan, p;
             order_discontinuity_t0 = max(1, order_discontinuity_t0), kwargs...)
     end
@@ -251,13 +253,26 @@ struct DDEProblem{uType, tType, lType, lType2, isinplace, P, F, H, K, PT} <:
     end
 end
 
-TruncatedStacktraces.@truncate_stacktrace DDEProblem 5 1 2
+function ConstructionBase.constructorof(::Type{P}) where {P <: DDEProblem}
+    function ctor(f, u0, h, tspan, p, constant_lags, dependent_lags,
+            kw, neutral, order_discontinuity_t0, problem_type)
+        if f isa AbstractDDEFunction
+            iip = isinplace(f)
+        else
+            iip = isinplace(f, 5)
+        end
+        return DDEProblem{iip}(f, u0, h, tspan, p; kw..., constant_lags, dependent_lags,
+            neutral, order_discontinuity_t0, problem_type)
+    end
+end
 
 DDEProblem(f, args...; kwargs...) = DDEProblem(DDEFunction(f), args...; kwargs...)
 
 function DDEProblem(f::AbstractDDEFunction, args...; kwargs...)
     DDEProblem{isinplace(f)}(f, args...; kwargs...)
 end
+
+SymbolicIndexingInterface.get_history_function(prob::AbstractDDEProblem) = prob.h
 
 """
 $(TYPEDEF)
@@ -277,7 +292,7 @@ struct DynamicalDDEProblem{iip} <: AbstractDynamicalDDEProblem end
 Define a dynamical DDE problem from a [`DynamicalDDEFunction`](@ref).
 """
 function DynamicalDDEProblem(f::DynamicalDDEFunction, v0, u0, h, tspan,
-    p = NullParameters(); dependent_lags = (), kwargs...)
+        p = NullParameters(); dependent_lags = (), kwargs...)
     DDEProblem(f, ArrayPartition(v0, u0), h, tspan, p;
         problem_type = DynamicalDDEProblem{isinplace(f)}(),
         dependent_lags = ntuple(i -> (u, p, t) -> dependent_lags[i](u[1], u[2], p, t),
@@ -285,7 +300,7 @@ function DynamicalDDEProblem(f::DynamicalDDEFunction, v0, u0, h, tspan,
         kwargs...)
 end
 function DynamicalDDEProblem(f::DynamicalDDEFunction, h, tspan, p = NullParameters();
-    kwargs...)
+        kwargs...)
     DynamicalDDEProblem(f, h(p, first(tspan))..., h, tspan, p; kwargs...)
 end
 function DynamicalDDEProblem(f1, f2, args...; kwargs...)
@@ -298,12 +313,13 @@ end
 Define a dynamical DDE problem from the two functions `f1` and `f2`.
 
 # Arguments
-* `f1` and `f2`: The functions in the DDE.
-* `v0` and `u0`: The initial conditions.
-* `h`: The initial history function.
-* `tspan`: The timespan for the problem.
-* `p`: Parameter values for `f1` and `f2`.
-* `callback`: A callback to be applied to every solver which uses the problem. Defaults to nothing.
+
+  - `f1` and `f2`: The functions in the DDE.
+  - `v0` and `u0`: The initial conditions.
+  - `h`: The initial history function.
+  - `tspan`: The timespan for the problem.
+  - `p`: Parameter values for `f1` and `f2`.
+  - `callback`: A callback to be applied to every solver which uses the problem. Defaults to nothing.
 
 `isinplace` optionally sets whether the function is inplace or not.
 This is determined automatically, but not inferred.
@@ -328,13 +344,14 @@ end
 Define a second order DDE problem with the specified function.
 
 # Arguments
-* `f`: The function for the second derivative.
-* `du0`: The initial derivative.
-* `u0`: The initial condition.
-* `h`: The initial history function.
-* `tspan`: The timespan for the problem.
-* `p`: Parameter values for `f`.
-* `callback`: A callback to be applied to every solver which uses the problem. Defaults to nothing.
+
+  - `f`: The function for the second derivative.
+  - `du0`: The initial derivative.
+  - `u0`: The initial condition.
+  - `h`: The initial history function.
+  - `tspan`: The timespan for the problem.
+  - `p`: Parameter values for `f`.
+  - `callback`: A callback to be applied to every solver which uses the problem. Defaults to nothing.
 
 `isinplace` optionally sets whether the function is inplace or not.
 This is determined automatically, but not inferred.
@@ -364,16 +381,53 @@ function SecondOrderDDEProblem(f::DynamicalDDEFunction, args...; kwargs...)
                 v
             end
         end
-        return DynamicalDDEProblem(DynamicalDDEFunction{iip}(f.f1, f2;
+        return DynamicalDDEProblem(
+            DynamicalDDEFunction{iip}(f.f1, f2;
                 mass_matrix = f.mass_matrix,
                 analytic = f.analytic),
             args...; problem_type = SecondOrderDDEProblem{iip}(),
             kwargs...)
     else
-        return DynamicalDDEProblem(DynamicalDDEFunction{iip}(f.f1, f.f2;
+        return DynamicalDDEProblem(
+            DynamicalDDEFunction{iip}(f.f1, f.f2;
                 mass_matrix = f.mass_matrix,
                 analytic = f.analytic),
             args...; problem_type = SecondOrderDDEProblem{iip}(),
             kwargs...)
+    end
+end
+
+@doc doc"""
+
+Holds information on what variables to alias
+when solving a DDE. Conforms to the AbstractAliasSpecifier interface. 
+    `DDEAliasSpecifier(;alias_p = nothing, alias_f = nothing, alias_u0 = nothing, alias_du0 = nothing, alias_tstops = nothing, alias = nothing)`
+
+When a keyword argument is `nothing`, the default behaviour of the solver is used.
+
+### Keywords 
+* `alias_p::Union{Bool, Nothing}`
+* `alias_f::Union{Bool, Nothing}`
+* `alias_u0::Union{Bool, Nothing}`: alias the u0 array. Defaults to false .
+* `alias_du0::Union{Bool, Nothing}`: alias the du0 array for DAEs. Defaults to false.
+* `alias_tstops::Union{Bool, Nothing}`: alias the tstops array
+* `alias::Union{Bool, Nothing}`: sets all fields of the `DDEAliasSpecifier` to `alias`
+
+"""
+struct DDEAliasSpecifier
+    alias_p::Union{Bool, Nothing}
+    alias_f::Union{Bool, Nothing}
+    alias_u0::Union{Bool, Nothing}
+    alias_tstops::Union{Bool, Nothing}
+
+    function DDEAliasSpecifier(; alias_p = nothing, alias_f = nothing, alias_u0 = nothing,
+            alias_du0 = nothing, alias_tstops = nothing, alias = nothing)
+        if alias == true
+            new(true, true, true, true)
+        elseif alias == false
+            new(false, false, false, false)
+        elseif isnothing(alias)
+            new(alias_p, alias_f, alias_u0, alias_tstops)
+        end
     end
 end

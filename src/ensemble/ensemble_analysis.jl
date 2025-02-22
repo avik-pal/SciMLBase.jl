@@ -3,11 +3,11 @@ module EnsembleAnalysis
 using SciMLBase, Statistics, RecursiveArrayTools, StaticArraysCore
 
 # Getters
-get_timestep(sim, i) = (getindex(sol, i) for sol in sim)
+get_timestep(sim, i) = (sol.u[i] for sol in sim)
 get_timepoint(sim, t) = (sol(t) for sol in sim)
 function componentwise_vectors_timestep(sim, i)
     arr = [get_timestep(sim, i)...]
-    if typeof(arr[1]) <: AbstractArray
+    if arr[1] isa AbstractArray
         return vecarr_to_vectors(VectorOfArray(arr))
     else
         return arr
@@ -15,7 +15,7 @@ function componentwise_vectors_timestep(sim, i)
 end
 function componentwise_vectors_timepoint(sim, t)
     arr = [get_timepoint(sim, t)...]
-    if typeof(arr[1]) <: AbstractArray
+    if arr[1] isa AbstractArray
         return vecarr_to_vectors(VectorOfArray(arr))
     else
         return arr
@@ -28,7 +28,7 @@ timestep_mean(sim, ::Colon) = timeseries_steps_mean(sim)
 function timestep_median(sim, i)
     arr = componentwise_vectors_timestep(sim, i)
     if typeof(first(arr)) <: AbstractArray
-        return reshape([median(x) for x in arr], size(sim[1][i])...)
+        return reshape([median(x) for x in arr], size(sim.u[1].u[i])...)
     else
         return median(arr)
     end
@@ -37,7 +37,7 @@ timestep_median(sim, ::Colon) = timeseries_steps_median(sim)
 function timestep_quantile(sim, q, i)
     arr = componentwise_vectors_timestep(sim, i)
     if typeof(first(arr)) <: AbstractArray
-        return reshape([quantile(x, q) for x in arr], size(sim[1][i])...)
+        return reshape([quantile(x, q) for x in arr], size(sim.u[1].u[i])...)
     else
         return quantile(arr, q)
     end
@@ -61,43 +61,52 @@ function timestep_weighted_meancov(sim, W, ::Colon, ::Colon)
 end
 
 function timeseries_steps_mean(sim)
-    DiffEqArray([timestep_mean(sim, i) for i in 1:length(sim[1])], sim[1].t)
+    DiffEqArray([timestep_mean(sim, i) for i in 1:length(sim.u[1])], sim.u[1].t)
 end
 function timeseries_steps_median(sim)
-    DiffEqArray([timestep_median(sim, i) for i in 1:length(sim[1])], sim[1].t)
+    DiffEqArray([timestep_median(sim, i) for i in 1:length(sim.u[1])], sim.u[1].t)
 end
 function timeseries_steps_quantile(sim, q)
-    DiffEqArray([timestep_quantile(sim, q, i) for i in 1:length(sim[1])], sim[1].t)
+    DiffEqArray([timestep_quantile(sim, q, i) for i in 1:length(sim.u[1])], sim.u[1].t)
 end
 function timeseries_steps_meanvar(sim)
     m, v = timestep_meanvar(sim, 1)
     means = [m]
     vars = [v]
-    for i in 2:length(sim[1])
+    for i in 2:length(sim.u[1])
         m, v = timestep_meanvar(sim, i)
         push!(means, m)
         push!(vars, v)
     end
-    DiffEqArray(means, sim[1].t), DiffEqArray(vars, sim[1].t)
+    DiffEqArray(means, sim.u[1].t), DiffEqArray(vars, sim.u[1].t)
 end
 function timeseries_steps_meancov(sim)
-    reshape([timestep_meancov(sim, i, j) for i in 1:length(sim[1])
-             for j in 1:length(sim[1])], length(sim[1]), length(sim[1]))
+    reshape(
+        [timestep_meancov(sim, i, j) for i in 1:length(sim.u[1])
+         for j in 1:length(sim.u[1])],
+        length(sim.u[1]),
+        length(sim.u[1]))
 end
 function timeseries_steps_meancor(sim)
-    reshape([timestep_meancor(sim, i, j) for i in 1:length(sim[1])
-             for j in 1:length(sim[1])], length(sim[1]), length(sim[1]))
+    reshape(
+        [timestep_meancor(sim, i, j) for i in 1:length(sim.u[1])
+         for j in 1:length(sim.u[1])],
+        length(sim.u[1]),
+        length(sim.u[1]))
 end
 function timeseries_steps_weighted_meancov(sim, W)
-    reshape([timestep_meancov(sim, W, i, j) for i in 1:length(sim[1])
-             for j in 1:length(sim[1])], length(sim[1]), length(sim[1]))
+    reshape(
+        [timestep_meancov(sim, W, i, j) for i in 1:length(sim.u[1])
+         for j in 1:length(sim.u[1])],
+        length(sim.u[1]),
+        length(sim.u[1]))
 end
 
 timepoint_mean(sim, t) = componentwise_mean(get_timepoint(sim, t))
 function timepoint_median(sim, t)
     arr = componentwise_vectors_timepoint(sim, t)
     if typeof(first(arr)) <: AbstractArray
-        return reshape([median(x) for x in arr], size(sim[1][1])...)
+        return reshape([median(x) for x in arr], size(sim.u[1].u[1])...)
     else
         return median(arr)
     end
@@ -105,7 +114,7 @@ end
 function timepoint_quantile(sim, q, t)
     arr = componentwise_vectors_timepoint(sim, t)
     if typeof(first(arr)) <: AbstractArray
-        return reshape([quantile(x, q) for x in arr], size(sim[1][1])...)
+        return reshape([quantile(x, q) for x in arr], size(sim.u[1].u[1])...)
     else
         return quantile(arr, q)
     end
@@ -122,8 +131,8 @@ function timepoint_weighted_meancov(sim, W, t1, t2)
 end
 
 function SciMLBase.EnsembleSummary(sim::SciMLBase.AbstractEnsembleSolution{T, N},
-    t = sim[1].t; quantiles = [0.05, 0.95]) where {T, N}
-    if typeof(sim[1]) <: SciMLSolution
+        t = sim.u[1].t; quantiles = [0.05, 0.95]) where {T, N}
+    if sim.u[1] isa SciMLSolution
         m, v = timeseries_point_meanvar(sim, t)
         med = timeseries_point_median(sim, t)
         qlow = timeseries_point_quantile(sim, quantiles[1], t)
@@ -190,13 +199,13 @@ function componentwise_mean(A)
     mean = zero(x0) ./ 1
     for x in A
         n += 1
-        if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+        if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
             mean .+= x
         else
             mean += x
         end
     end
-    if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+    if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
         mean ./= n
     else
         mean /= n
@@ -215,7 +224,7 @@ function componentwise_meanvar(A; bessel = true)
     delta2 = zero(x0) ./ 1
     for x in A
         n += 1
-        if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+        if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
             delta .= x .- mean
             mean .+= delta ./ n
             delta2 .= x .- mean
@@ -231,13 +240,13 @@ function componentwise_meanvar(A; bessel = true)
         return NaN
     else
         if bessel
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 M2 .= M2 ./ (n .- 1)
             else
                 M2 = M2 ./ (n .- 1)
             end
         else
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 M2 .= M2 ./ n
             else
                 M2 = M2 ./ n
@@ -257,7 +266,7 @@ function componentwise_meancov(A, B; bessel = true)
     dx = zero(x0) ./ 1
     for (x, y) in zip(A, B)
         n += 1
-        if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+        if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
             dx .= x .- meanx
             meanx .+= dx ./ n
             meany .+= (y .- meany) ./ n
@@ -273,13 +282,13 @@ function componentwise_meancov(A, B; bessel = true)
         return NaN
     else
         if bessel
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 C .= C ./ (n .- 1)
             else
                 C = C ./ (n .- 1)
             end
         else
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 C .= C ./ n
             else
                 C = C ./ n
@@ -293,7 +302,7 @@ function componentwise_meancor(A, B; bessel = true)
     mx, my, cov = componentwise_meancov(A, B; bessel = bessel)
     mx, vx = componentwise_meanvar(A; bessel = bessel)
     my, vy = componentwise_meanvar(B; bessel = bessel)
-    if typeof(vx) <: AbstractArray
+    if vx isa AbstractArray
         vx .= sqrt.(vx)
         vy .= sqrt.(vy)
     else
@@ -316,7 +325,7 @@ function componentwise_weighted_meancov(A, B, W; weight_type = :reliability)
     dx = zero(x0) ./ 1
     for (x, y, w) in zip(A, B, W)
         n += 1
-        if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+        if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
             wsum .+= w
             wsum2 .+= w .* w
             dx .= x .- meanx
@@ -336,19 +345,19 @@ function componentwise_weighted_meancov(A, B, W; weight_type = :reliability)
         return NaN
     else
         if weight_type == :population
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 C .= C ./ wsum
             else
                 C = C ./ wsum
             end
         elseif weight_type == :reliability
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 C .= C ./ (wsum .- wsum2 ./ wsum)
             else
                 C = C ./ (wsum .- wsum2 ./ wsum)
             end
         elseif weight_type == :frequency
-            if typeof(x0) <: AbstractArray && !(typeof(x0) <: StaticArraysCore.SArray)
+            if x0 isa AbstractArray && !(x0 isa StaticArraysCore.SArray)
                 C .= C ./ (wsum .- 1)
             else
                 C = C ./ (wsum .- 1)
@@ -361,24 +370,24 @@ function componentwise_weighted_meancov(A, B, W; weight_type = :reliability)
 end
 
 export get_timestep,
-    get_timepoint,
-    componentwise_vectors_timestep, componentwise_vectors_timepoint
+       get_timepoint,
+       componentwise_vectors_timestep, componentwise_vectors_timepoint
 
 export componentwise_mean, componentwise_meanvar
 
 export timestep_mean, timestep_median, timestep_quantile, timestep_meanvar,
-    timestep_meancov, timestep_meancor, timestep_weighted_meancov
+       timestep_meancov, timestep_meancor, timestep_weighted_meancov
 
 export timeseries_steps_mean, timeseries_steps_median, timeseries_steps_quantile,
-    timeseries_steps_meanvar, timeseries_steps_meancov,
-    timeseries_steps_meancor, timeseries_steps_weighted_meancov
+       timeseries_steps_meanvar, timeseries_steps_meancov,
+       timeseries_steps_meancor, timeseries_steps_weighted_meancov
 
 export timepoint_mean, timepoint_median, timepoint_quantile,
-    timepoint_meanvar, timepoint_meancov,
-    timepoint_meancor, timepoint_weighted_meancov
+       timepoint_meanvar, timepoint_meancov,
+       timepoint_meancor, timepoint_weighted_meancov
 
 export timeseries_point_mean, timeseries_point_median, timeseries_point_quantile,
-    timeseries_point_meanvar, timeseries_point_meancov,
-    timeseries_point_meancor, timeseries_point_weighted_meancov
+       timeseries_point_meanvar, timeseries_point_meancov,
+       timeseries_point_meancor, timeseries_point_weighted_meancov
 
 end

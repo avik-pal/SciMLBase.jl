@@ -4,7 +4,7 @@ const DISCRETE_OUTOFPLACE_DEFAULT = DiscreteFunction{false}((u, p, t) -> u)
 @doc doc"""
 
 Defines a discrete dynamical system problem.
-Documentation Page: https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/
+Documentation Page: [https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/](https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/)
 
 ## Mathematical Specification of a Discrete Problem
 
@@ -88,21 +88,22 @@ struct DiscreteProblem{uType, tType, isinplace, P, F, K} <:
     """ A callback to be applied to every solver which uses the problem."""
     kwargs::K
     @add_kwonly function DiscreteProblem{iip}(f::AbstractDiscreteFunction{iip},
-        u0, tspan::Tuple, p = NullParameters();
-        kwargs...) where {iip}
+            u0, tspan, p = NullParameters();
+            kwargs...) where {iip}
+        _u0 = prepare_initial_state(u0)
         _tspan = promote_tspan(tspan)
         warn_paramtype(p)
-        new{typeof(u0), typeof(_tspan), isinplace(f, 4),
+        new{typeof(_u0), typeof(_tspan), isinplace(f, 4),
             typeof(p),
             typeof(f), typeof(kwargs)}(f,
-            u0,
+            _u0,
             _tspan,
             p,
             kwargs)
     end
 
     function DiscreteProblem{iip}(u0::Nothing, tspan::Nothing, p = NullParameters();
-        callback = nothing) where {iip}
+            callback = nothing) where {iip}
         if iip
             f = DISCRETE_INPLACE_DEFAULT
         else
@@ -121,20 +122,29 @@ struct DiscreteProblem{uType, tType, isinplace, P, F, K} <:
     end
 end
 
-TruncatedStacktraces.@truncate_stacktrace DiscreteProblem 3 1 2
+function ConstructionBase.constructorof(::Type{P}) where {P <: DiscreteProblem}
+    function ctor(f, u0, tspan, p, kw)
+        if f isa AbstractDiscreteFunction
+            iip = isinplace(f)
+        else
+            iip = isinplace(f, 4)
+        end
+        return DiscreteProblem{iip}(f, u0, tspan, p; kw...)
+    end
+end
 
 """
     DiscreteProblem{isinplace}(f,u0,tspan,p=NullParameters(),callback=nothing)
 
 Defines a discrete problem with the specified functions.
 """
-function DiscreteProblem(f::AbstractDiscreteFunction, u0, tspan::Tuple,
-    p = NullParameters(); kwargs...)
+function DiscreteProblem(f::AbstractDiscreteFunction, u0, tspan,
+        p = NullParameters(); kwargs...)
     DiscreteProblem{isinplace(f)}(f, u0, tspan, p; kwargs...)
 end
 
-function DiscreteProblem(f::Base.Callable, u0, tspan::Tuple, p = NullParameters();
-    kwargs...)
+function DiscreteProblem(f::Base.Callable, u0, tspan, p = NullParameters();
+        kwargs...)
     iip = isinplace(f, 4)
     DiscreteProblem(DiscreteFunction{iip}(f), u0, tspan, p; kwargs...)
 end
@@ -144,13 +154,46 @@ $(SIGNATURES)
 
 Define a discrete problem with the identity map.
 """
-function DiscreteProblem(u0::Union{AbstractArray, Number}, tspan::Tuple,
-    p = NullParameters(); kwargs...)
-    iip = typeof(u0) <: AbstractArray
+function DiscreteProblem(u0::Union{AbstractArray, Number}, tspan,
+        p = NullParameters(); kwargs...)
+    iip = u0 isa AbstractArray
     if iip
         f = DISCRETE_INPLACE_DEFAULT
     else
         f = DISCRETE_OUTOFPLACE_DEFAULT
     end
     DiscreteProblem(f, u0, tspan, p; kwargs...)
+end
+
+@doc doc"""
+
+Holds information on what variables to alias
+when solving a DiscreteProblem. Conforms to the AbstractAliasSpecifier interface. 
+    `DiscreteAliasSpecifier(;alias_p = nothing, alias_f = nothing, alias_u0 = nothing, alias = nothing)`
+
+When a keyword argument is `nothing`, the default behaviour of the solver is used.
+
+### Keywords 
+* `alias_p::Union{Bool, Nothing}`
+* `alias_f::Union{Bool, Nothing}`
+* `alias_u0::Union{Bool, Nothing}`: alias the u0 array. Defaults to false .
+* `alias::Union{Bool, Nothing}`: sets all fields of the `DiscreteAliasSpecifier` to `alias`
+
+"""
+struct DiscreteAliasSpecifier
+    alias_p::Union{Bool, Nothing}
+    alias_f::Union{Bool, Nothing}
+    alias_u0::Union{Bool, Nothing}
+
+    function DiscreteAliasSpecifier(;
+            alias_p = nothing, alias_f = nothing, alias_u0 = nothing,
+            alias_du0 = nothing, alias = nothing)
+        if alias == true
+            new(true, true, true)
+        elseif alias == false
+            new(false, false, false)
+        elseif isnothing(alias)
+            new(alias_p, alias_f, alias_u0)
+        end
+    end
 end

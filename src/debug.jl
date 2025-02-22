@@ -34,7 +34,7 @@ ODEProblem{iip,SciMLBase.FullSpecialize}(f,u0,tspan,p)
 where `iip` is either true or false depending on the in-placeness of the definition of `f` (i.e. for ODEs
 if `f` has 3 arguments `(u,p,t)` then it's false, otherwise `f(du,u,p,t)` is true).
 
-For more information on the control of specailization options, please see the documentation at:
+For more information on the control of specialization options, please see the documentation at:
 
 https://docs.sciml.ai/SciMLBase/stable/interfaces/Problems/#Specialization-Choices
 
@@ -49,17 +49,18 @@ into the AbstractSciMLProblem (e.x.: ODEProblem) but the parameters object `p` w
 expression. Two common reasons for this issue are:
 
 1. Forgetting to pass parameters into the problem constructor. For example, `ODEProblem(f,u0,tspan)` should
-be `ODEProblem(f,u0,tspan,p)` in order to use parameters.
+   be `ODEProblem(f,u0,tspan,p)` in order to use parameters.
 
 2. Using the wrong function signature. For example, with `ODEProblem`s the function signature is always
-`f(du,u,p,t)` for the in-place form or `f(u,p,t)` for the out-of-place form. Note that the `p` argument
-will always be in the function signature reguardless of if the problem is defined with parameters!
+   `f(du,u,p,t)` for the in-place form or `f(u,p,t)` for the out-of-place form. Note that the `p` argument
+   will always be in the function signature regardless of if the problem is defined with parameters!
 """
 
 function __init__()
     Base.Experimental.register_error_hint(DomainError) do io, e
         if e isa DomainError &&
-           occursin("will only return a complex result if called with a complex argument. Try ",
+           occursin(
+            "will only return a complex result if called with a complex argument. Try ",
             e.msg)
             println(io, DOMAINERROR_COMPLEX_MSG)
         end

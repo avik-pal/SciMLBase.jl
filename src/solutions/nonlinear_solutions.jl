@@ -17,6 +17,20 @@ mutable struct NLStats
     nsteps::Int
 end
 
+function Base.show(io::IO, ::MIME"text/plain", s::NLStats)
+    println(io, summary(s))
+    @printf io "%-50s %-d\n" "Number of function evaluations:" s.nf
+    @printf io "%-50s %-d\n" "Number of Jacobians created:" s.njacs
+    @printf io "%-50s %-d\n" "Number of factorizations:" s.nfactors
+    @printf io "%-50s %-d\n" "Number of linear solves:" s.nsolve
+    @printf io "%-50s %-d" "Number of nonlinear solver iterations:" s.nsteps
+end
+
+function Base.merge(s1::NLStats, s2::NLStats)
+    NLStats(s1.nf + s2.nf, s1.njacs + s2.njacs, s1.nfactors + s2.nfactors,
+        s1.nsolve + s2.nsolve, s1.nsteps + s2.nsteps)
+end
+
 """
 $(TYPEDEF)
 
@@ -38,7 +52,7 @@ or the steady state solution to a differential equation defined by a SteadyState
 - `right`: if the solver is bracketing method, this is the final right bracket value.
 - `stats`: statistics of the solver, such as the number of function evaluations required.
 """
-struct NonlinearSolution{T, N, uType, R, P, A, O, uType2, S} <:
+struct NonlinearSolution{T, N, uType, R, P, A, O, uType2, S, Tr} <:
        AbstractNonlinearSolution{T, N}
     u::uType
     resid::R
@@ -49,37 +63,39 @@ struct NonlinearSolution{T, N, uType, R, P, A, O, uType2, S} <:
     left::uType2
     right::uType2
     stats::S
+    trace::Tr
 end
-
-TruncatedStacktraces.@truncate_stacktrace NonlinearSolution 1 2
 
 const SteadyStateSolution = NonlinearSolution
 
 get_p(p::AbstractNonlinearSolution) = p.prob.p
 
-function build_solution(prob::AbstractNonlinearProblem,
-    alg, u, resid; calculate_error = true,
-    retcode = ReturnCode.Default,
-    original = nothing,
-    left = nothing,
-    right = nothing,
-    stats = nothing,
-    kwargs...)
+function build_solution(prob::Union{AbstractNonlinearProblem, SCCNonlinearProblem},
+        alg, u, resid; calculate_error = true,
+        retcode = ReturnCode.Default,
+        original = nothing,
+        left = nothing,
+        right = nothing,
+        stats = nothing,
+        trace = nothing,
+        kwargs...)
     T = eltype(eltype(u))
     N = ndims(u)
 
     NonlinearSolution{T, N, typeof(u), typeof(resid), typeof(prob), typeof(alg),
-        typeof(original), typeof(left), typeof(stats)}(u, resid, prob, alg,
-        retcode, original,
-        left, right, stats)
+        typeof(original), typeof(left), typeof(stats), typeof(trace)}(u, resid, prob, alg,
+        retcode, original, left, right, stats, trace)
 end
 
 function sensitivity_solution(sol::AbstractNonlinearSolution, u)
     T = eltype(eltype(u))
     N = ndims(u)
 
+    # Some of the subtypes might not have a trace field
+    trace = hasfield(typeof(sol), :trace) ? sol.trace : nothing
+
     NonlinearSolution{T, N, typeof(u), typeof(sol.resid), typeof(sol.prob),
         typeof(sol.alg), typeof(sol.original), typeof(sol.left),
-        typeof(sol.stats)}(u, sol.resid, sol.prob, sol.alg, sol.retcode,
-        sol.original, sol.left, sol.right, sol.stats)
+        typeof(sol.stats), typeof(trace)}(u, sol.resid, sol.prob, sol.alg, sol.retcode,
+        sol.original, sol.left, sol.right, sol.stats, trace)
 end

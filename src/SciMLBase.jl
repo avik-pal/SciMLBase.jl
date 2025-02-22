@@ -4,13 +4,15 @@ if isdefined(Base, :Experimental) &&
     @eval Base.Experimental.@max_methods 1
 end
 using ConstructionBase
-using RecipesBase, RecursiveArrayTools, Tables
+using RecipesBase, RecursiveArrayTools
+using SciMLStructures
 using SymbolicIndexingInterface
 using DocStringExtensions
 using LinearAlgebra
 using Statistics
 using Distributed
 using Markdown
+using Printf
 import Preferences
 
 import Logging, ArrayInterface
@@ -19,25 +21,24 @@ import CommonSolve: solve, init, step!, solve!
 import FunctionWrappersWrappers
 import RuntimeGeneratedFunctions
 import EnumX
-import TruncatedStacktraces
-import ADTypes: AbstractADType
-import ChainRulesCore
-import ZygoteRules: @adjoint
-import FillArrays
+import ADTypes: ADTypes, AbstractADType
+import Accessors: @set, @reset, @delete, @insert
+using Moshi.Data: @data
+using Moshi.Match: @match
 
 using Reexport
 using SciMLOperators
 using SciMLOperators:
-    AbstractSciMLOperator,
-    IdentityOperator, NullOperator,
-    ScaledOperator, AddedOperator, ComposedOperator,
-    InvertedOperator, InvertibleOperator
+                      AbstractSciMLOperator,
+                      IdentityOperator, NullOperator,
+                      ScaledOperator, AddedOperator, ComposedOperator,
+                      InvertedOperator, InvertibleOperator
 
 import SciMLOperators:
-    DEFAULT_UPDATE_FUNC, update_coefficients, update_coefficients!,
-    getops, isconstant, iscached, islinear, issquare,
-    has_adjoint, has_expmv, has_expmv!, has_exp,
-    has_mul, has_mul!, has_ldiv, has_ldiv!
+                       DEFAULT_UPDATE_FUNC, update_coefficients, update_coefficients!,
+                       getops, isconstant, iscached, islinear, issquare,
+                       has_adjoint, has_expmv, has_expmv!, has_exp,
+                       has_mul, has_mul!, has_ldiv, has_ldiv!
 
 @reexport using SciMLOperators
 
@@ -101,7 +102,7 @@ abstract type AbstractOptimizationCache end
 """
 $(TYPEDEF)
 
-Base for types which define nonlinear solve problems (f(u)=0).
+Base for types which define nonlinear solve problems (`f(u)=0`).
 """
 abstract type AbstractNonlinearProblem{uType, isinplace} <: AbstractDEProblem end
 abstract type AbstractIntervalNonlinearProblem{uType, isinplace} <:
@@ -182,7 +183,7 @@ $(TYPEDEF)
 
 Base for types which define BVP problems.
 """
-abstract type AbstractBVProblem{uType, tType, isinplace} <:
+abstract type AbstractBVProblem{uType, tType, isinplace, nlls} <:
               AbstractODEProblem{uType, tType, isinplace} end
 
 """
@@ -342,6 +343,25 @@ abstract type DAEInitializationAlgorithm <: AbstractSciMLAlgorithm end
 $(TYPEDEF)
 """
 struct NoInit <: DAEInitializationAlgorithm end
+
+"""
+$(TYPEDEF)
+"""
+struct CheckInit <: DAEInitializationAlgorithm end
+
+"""
+$(TYPEDEF)
+"""
+struct OverrideInit{T1, T2, F} <: DAEInitializationAlgorithm
+    abstol::T1
+    reltol::T2
+    nlsolve::F
+end
+
+function OverrideInit(; abstol = nothing, reltol = nothing, nlsolve = nothing)
+    OverrideInit(abstol, reltol, nlsolve)
+end
+OverrideInit(abstol) = OverrideInit(; abstol = abstol, nlsolve = nothing)
 
 # PDE Discretizations
 
@@ -589,6 +609,14 @@ abstract type AbstractDiffEqFunction{iip} <:
 """
 $(TYPEDEF)
 
+Base for types defining integrand functions.
+"""
+abstract type AbstractIntegralFunction{iip} <:
+              AbstractSciMLFunction{iip} end
+
+"""
+$(TYPEDEF)
+
 Base for types defining optimization functions.
 """
 abstract type AbstractOptimizationFunction{iip} <: AbstractSciMLFunction{iip} end
@@ -615,9 +643,24 @@ abstract type ADOriginator end
 """
 $(TYPEDEF)
 
+Used to specify which variables can be aliased in a solve. 
+Every concrete AbstractAliasSpecifier should have at least the fields `alias_p` and `alias_f`. 
+"""
+abstract type AbstractAliasSpecifier end
+
+"""
+$(TYPEDEF)
+
 Internal. Used for signifying the AD context comes from a ChainRules.jl definition.
 """
 struct ChainRulesOriginator <: ADOriginator end
+
+"""
+$(TYPEDEF)
+
+Internal. Used for signifying the AD context comes from an Enzyme.jl definition.
+"""
+struct EnzymeOriginator <: ADOriginator end
 
 """
 $(TYPEDEF)
@@ -633,6 +676,8 @@ Internal. Used for signifying the AD context comes from a Tracker.jl context.
 """
 struct TrackerOriginator <: ADOriginator end
 
+include("initialization.jl")
+include("ODE_nlsolve.jl")
 include("utils.jl")
 include("function_wrappers.jl")
 include("scimlfunctions.jl")
@@ -646,21 +691,24 @@ function unwrapped_f(f::FunctionWrappersWrappers.FunctionWrappersWrapper)
 end
 
 function specialization(::Union{ODEFunction{iip, specialize},
-    SDEFunction{iip, specialize}, DDEFunction{iip, specialize},
-    SDDEFunction{iip, specialize},
-    DAEFunction{iip, specialize},
-    DynamicalODEFunction{iip, specialize},
-    SplitFunction{iip, specialize},
-    DynamicalSDEFunction{iip, specialize},
-    SplitSDEFunction{iip, specialize},
-    DynamicalDDEFunction{iip, specialize},
-    DiscreteFunction{iip, specialize},
-    ImplicitDiscreteFunction{iip, specialize},
-    RODEFunction{iip, specialize},
-    NonlinearFunction{iip, specialize},
-    OptimizationFunction{iip, specialize},
-    BVPFunction{iip, specialize}}) where {iip,
-    specialize}
+        SDEFunction{iip, specialize}, DDEFunction{iip, specialize},
+        SDDEFunction{iip, specialize},
+        DAEFunction{iip, specialize},
+        DynamicalODEFunction{iip, specialize},
+        SplitFunction{iip, specialize},
+        DynamicalSDEFunction{iip, specialize},
+        SplitSDEFunction{iip, specialize},
+        DynamicalDDEFunction{iip, specialize},
+        DiscreteFunction{iip, specialize},
+        ImplicitDiscreteFunction{iip, specialize},
+        RODEFunction{iip, specialize},
+        NonlinearFunction{iip, specialize},
+        OptimizationFunction{iip, specialize},
+        BVPFunction{iip, specialize},
+        DynamicalBVPFunction{iip, specialize},
+        IntegralFunction{iip, specialize},
+        BatchIntegralFunction{iip, specialize}}) where {iip,
+        specialize}
     specialize
 end
 
@@ -683,7 +731,9 @@ include("problems/discrete_problems.jl")
 include("problems/implicit_discrete_problems.jl")
 include("problems/steady_state_problems.jl")
 include("problems/analytical_problems.jl")
-include("problems/basic_problems.jl")
+include("problems/linear_problems.jl")
+include("problems/nonlinear_problems.jl")
+include("problems/integral_problems.jl")
 include("problems/ode_problems.jl")
 include("problems/rode_problems.jl")
 include("problems/sde_problems.jl")
@@ -696,7 +746,10 @@ include("problems/pde_problems.jl")
 include("problems/problem_utils.jl")
 include("problems/problem_traits.jl")
 include("problems/problem_interface.jl")
+include("problems/optimization_problems.jl")
 
+include("clock.jl")
+include("solutions/save_idxs.jl")
 include("solutions/basic_solutions.jl")
 include("solutions/nonlinear_solutions.jl")
 include("solutions/ode_solutions.jl")
@@ -705,7 +758,6 @@ include("solutions/optimization_solutions.jl")
 include("solutions/dae_solutions.jl")
 include("solutions/pde_solutions.jl")
 include("solutions/solution_interface.jl")
-include("solutions/zygote.jl")
 
 include("ensemble/ensemble_solutions.jl")
 include("ensemble/ensemble_problems.jl")
@@ -715,7 +767,6 @@ include("ensemble/ensemble_analysis.jl")
 include("solve.jl")
 include("interpolation.jl")
 include("integrator_interface.jl")
-include("tabletraits.jl")
 include("remake.jl")
 include("callbacks.jl")
 
@@ -759,37 +810,42 @@ export isinplace
 
 export solve, solve!, init, discretize, symbolic_discretize
 
-export LinearProblem,
-    NonlinearProblem, IntervalNonlinearProblem,
-    IntegralProblem, SampledIntegralProblem, OptimizationProblem
+export LinearProblem, IntervalNonlinearProblem,
+       IntegralProblem, SampledIntegralProblem, OptimizationProblem
+
+export NonlinearProblem, SCCNonlinearProblem, NonlinearLeastSquaresProblem
 
 export DiscreteProblem, ImplicitDiscreteProblem
 export SteadyStateProblem, SteadyStateSolution
 export NoiseProblem
 export ODEProblem, ODESolution
 export DynamicalODEFunction,
-    DynamicalODEProblem,
-    SecondOrderODEProblem, SplitFunction, SplitODEProblem
+       DynamicalODEProblem,
+       SecondOrderODEProblem, SplitFunction, SplitODEProblem
 export SplitSDEProblem
 export DynamicalSDEFunction, DynamicalSDEProblem
 export RODEProblem, RODESolution, SDEProblem
 export DAEProblem, DAESolution
 export DDEProblem
 export DynamicalDDEFunction, DynamicalDDEProblem,
-    SecondOrderDDEProblem
+       SecondOrderDDEProblem
 export SDDEProblem
 export PDEProblem
 export IncrementingODEProblem
 
-export BVProblem, TwoPointBVProblem
+export BVProblem, TwoPointBVProblem, SecondOrderBVProblem, TwoPointSecondOrderBVProblem
 
 export remake
 
 export ODEFunction, DiscreteFunction, ImplicitDiscreteFunction, SplitFunction, DAEFunction,
-    DDEFunction, SDEFunction, SplitSDEFunction, RODEFunction, SDDEFunction,
-    IncrementingODEFunction, NonlinearFunction, IntervalNonlinearFunction, BVPFunction
+       DDEFunction, SDEFunction, SplitSDEFunction, RODEFunction, SDDEFunction,
+       IncrementingODEFunction, NonlinearFunction, HomotopyNonlinearFunction,
+       IntervalNonlinearFunction, BVPFunction,
+       DynamicalBVPFunction, IntegralFunction, BatchIntegralFunction
 
-export OptimizationFunction
+export OptimizationFunction, MultiObjectiveOptimizationFunction
+
+export CheckInit
 
 export EnsembleThreads, EnsembleDistributed, EnsembleSplitThreads, EnsembleSerial
 
@@ -802,17 +858,21 @@ export AffineDiffEqOperator, DiffEqScaledOperator
 export DiffEqScalar, DiffEqArrayOperator, DiffEqIdentity
 
 export step!, deleteat!, addat!, get_tmp_cache,
-    full_cache, user_cache, u_cache, du_cache,
-    rand_cache, ratenoise_cache,
-    resize_non_user_cache!, deleteat_non_user_cache!, addat_non_user_cache!,
-    terminate!,
-    add_tstop!, has_tstop, first_tstop, pop_tstop!,
-    add_saveat!, set_abstol!,
-    set_reltol!, get_du, get_du!, get_dt, get_proposed_dt, set_proposed_dt!,
-    u_modified!, savevalues!, reinit!, auto_dt_reset!, set_t!,
-    set_u!, check_error, change_t_via_interpolation!, addsteps!,
-    isdiscrete, reeval_internals_due_to_modification!
+       full_cache, user_cache, u_cache, du_cache,
+       rand_cache, ratenoise_cache,
+       resize_non_user_cache!, deleteat_non_user_cache!, addat_non_user_cache!,
+       terminate!,
+       add_tstop!, has_tstop, first_tstop, pop_tstop!,
+       add_saveat!, set_abstol!,
+       set_reltol!, get_du, get_du!, get_dt, get_proposed_dt, set_proposed_dt!,
+       u_modified!, savevalues!, reinit!, auto_dt_reset!, set_t!,
+       set_u!, check_error, change_t_via_interpolation!, addsteps!,
+       isdiscrete, reeval_internals_due_to_modification!
 
 export ContinuousCallback, DiscreteCallback, CallbackSet, VectorContinuousCallback
+
+export Clocks, TimeDomain, is_discrete_time_domain, isclock, issolverstepclock, iscontinuous
+
+export ODEAliasSpecifier, LinearAliasSpecifier
 
 end

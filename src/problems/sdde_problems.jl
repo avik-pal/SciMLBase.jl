@@ -1,7 +1,7 @@
 @doc doc"""
 
 Defines a stochastic delay differential equation (SDDE) problem.
-Documentation Page: https://docs.sciml.ai/DiffEqDocs/stable/types/sdde_types/
+Documentation Page: [https://docs.sciml.ai/DiffEqDocs/stable/types/sdde_types/](https://docs.sciml.ai/DiffEqDocs/stable/types/sdde_types/)
 
 ## Mathematical Specification of a Stochastic Delay Differential Equation (SDDE) Problem
 
@@ -118,27 +118,28 @@ struct SDDEProblem{uType, tType, lType, lType2, isinplace, P, NP, F, G, H, K, ND
     order_discontinuity_t0::Rational{Int}
 
     @add_kwonly function SDDEProblem{iip}(f::AbstractSDDEFunction{iip}, g, u0, h, tspan,
-        p = NullParameters();
-        noise_rate_prototype = nothing, noise = nothing,
-        seed = UInt64(0),
-        constant_lags = (), dependent_lags = (),
-        neutral = f.mass_matrix !== I &&
-                  det(f.mass_matrix) != 1,
-        order_discontinuity_t0 = 0 // 1,
-        kwargs...) where {iip}
+            p = NullParameters();
+            noise_rate_prototype = nothing, noise = nothing,
+            seed = UInt64(0),
+            constant_lags = (), dependent_lags = (),
+            neutral = f.mass_matrix !== I &&
+                      det(f.mass_matrix) != 1,
+            order_discontinuity_t0 = 0 // 1,
+            kwargs...) where {iip}
+        _u0 = prepare_initial_state(u0)
         _tspan = promote_tspan(tspan)
         warn_paramtype(p)
-        new{typeof(u0), typeof(_tspan), typeof(constant_lags), typeof(dependent_lags),
+        new{typeof(_u0), typeof(_tspan), typeof(constant_lags), typeof(dependent_lags),
             isinplace(f),
             typeof(p), typeof(noise), typeof(f), typeof(g), typeof(h), typeof(kwargs),
-            typeof(noise_rate_prototype)}(f, g, u0, h, _tspan, p, noise, constant_lags,
+            typeof(noise_rate_prototype)}(f, g, _u0, h, _tspan, p, noise, constant_lags,
             dependent_lags, kwargs, noise_rate_prototype,
             seed, neutral, order_discontinuity_t0)
     end
 
     function SDDEProblem{iip}(f::AbstractSDDEFunction{iip}, g, h, tspan::Tuple,
-        p = NullParameters();
-        order_discontinuity_t0 = 1 // 1, kwargs...) where {iip}
+            p = NullParameters();
+            order_discontinuity_t0 = 1 // 1, kwargs...) where {iip}
         SDDEProblem{iip}(f, g, h(p, first(tspan)), h, tspan, p;
             order_discontinuity_t0 = max(1 // 1, order_discontinuity_t0),
             kwargs...)
@@ -149,12 +150,62 @@ struct SDDEProblem{uType, tType, lType, lType2, isinplace, P, NP, F, G, H, K, ND
     end
 end
 
-TruncatedStacktraces.@truncate_stacktrace SDDEProblem 5 1 2
-
 function SDDEProblem(f, g, args...; kwargs...)
     SDDEProblem(SDDEFunction(f, g), g, args...; kwargs...)
 end
 
 function SDDEProblem(f::AbstractSDDEFunction, args...; kwargs...)
     SDDEProblem{isinplace(f)}(f, args...; kwargs...)
+end
+
+function ConstructionBase.constructorof(::Type{P}) where {P <: SDDEProblem}
+    function ctor(f, g, u0, h, tspan, p, noise, constant_lags, dependent_lags, kw,
+            noise_rate_prototype, seed, neutral, order_discontinuity_t0)
+        if f isa AbstractSDDEFunction
+            iip = isinplace(f)
+        else
+            iip = isinplace(f, 5)
+        end
+        return SDDEProblem{iip}(
+            f, g, u0, h, tspan, p; kw..., noise, constant_lags, dependent_lags,
+            noise_rate_prototype, seed, neutral, order_discontinuity_t0)
+    end
+end
+
+SymbolicIndexingInterface.get_history_function(prob::AbstractSDDEProblem) = prob.h
+
+@doc doc"""
+
+Holds information on what variables to alias
+when solving an SDDEProblem. Conforms to the AbstractAliasSpecifier interface. 
+    `SDDEAliasSpecifier(;alias_p = nothing, alias_f = nothing, alias_u0 = nothing, alias_du0 = nothing, alias_tstops = nothing, alias = nothing)`
+
+When a keyword argument is `nothing`, the default behaviour of the solver is used.
+
+### Keywords 
+* `alias_p::Union{Bool, Nothing}`
+* `alias_f::Union{Bool, Nothing}`
+* `alias_u0::Union{Bool, Nothing}`: alias the u0 array. Defaults to false .
+* `alias_tstops::Union{Bool, Nothing}`: alias the tstops array
+* `alias_jumps::Union{Bool, Nothing}`: alias jump process if wrapped in a JumpProcess
+* `alias::Union{Bool, Nothing}`: sets all fields of the `SDDEAliasSpecifier` to `alias`
+
+"""
+struct SDDEAliasSpecifier
+    alias_p::Union{Bool, Nothing}
+    alias_f::Union{Bool, Nothing}
+    alias_u0::Union{Bool, Nothing}
+    alias_tstops::Union{Bool, Nothing}
+    alias_jumps::Union{Bool, Nothing}
+
+    function SDDEAliasSpecifier(; alias_p = nothing, alias_f = nothing, alias_u0 = nothing,
+            alias_du0 = nothing, alias_tstops = nothing, alias_jumps = nothing, alias = nothing)
+        if alias == true
+            new(true, true, true, true, true)
+        elseif alias == false
+            new(false, false, false, false, false)
+        elseif isnothing(alias)
+            new(alias_p, alias_f, alias_u0, alias_tstops, alias_jumps)
+        end
+    end
 end

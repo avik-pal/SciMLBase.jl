@@ -20,8 +20,8 @@ The following standard principles should be adhered to across all
 Each `AbstractSciMLProblem` type can be called with an "is inplace" (iip) choice. For example:
 
 ```julia
-ODEProblem(f,u0,tspan,p)
-ODEProblem{iip}(f,u0,tspan,p)
+ODEProblem(f, u0, tspan, p)
+ODEProblem{iip}(f, u0, tspan, p)
 ```
 
 which is a boolean for whether the function is in the inplace form (mutating to
@@ -44,8 +44,8 @@ scenarios but falls back to a runtime-optimal approach when further customizatio
 Specialization levels are given as the second type parameter in `AbstractSciMLProblem`
 constructors. For example, this is done via:
 
-```julia 
-ODEProblem{iip,specialization}(f,u0,tspan,p)
+```julia
+ODEProblem{iip, specialization}(f, u0, tspan, p)
 ```
 
 Note that `iip` choice is required for specialization choices to be made.
@@ -61,12 +61,12 @@ SciMLBase.FullSpecialize
 ```
 
 !!! note
-
+    
     The specialization level must be precompile snooped in the appropriate solver
     package in order to enable the full precompilation and system image generation
     for zero-latency usage. By default, this is only done with AutoSpecialize and
     on types `u isa Vector{Float64}`, `eltype(tspan) isa Float64`, and
-    `p isa Union{Vector{Float64}, SciMLBase.NullParameters}`. Precompilation snooping 
+    `p isa Union{Vector{Float64}, SciMLBase.NullParameters}`. Precompilation snooping
     in the solvers can be done using the Preferences.jl setup on the appropriate
     solver. See the solver library's documentation for more details.
 
@@ -86,7 +86,7 @@ usage, a `AbstractSciMLProblem` might be associated with some solver configurati
 callback or tolerance. Thus, for flexibility the extra keyword arguments to the
 `AbstractSciMLProblem` are carried to the solver.
 
-### problem_type
+### `problem_type`
 
 `AbstractSciMLProblem` types include a non-public API definition of `problem_type` which holds
 a trait type corresponding to the way the `AbstractSciMLProblem` was constructed. For example,
@@ -100,6 +100,35 @@ the original definition and extra structure.
 ```@docs
 remake
 ```
+
+For problems that are created from a system (e.g. created through ModelingToolkit.jl) or
+define a DSL using `SymbolicIndexingInterface.SymbolCache`, `remake` can accept symbolic
+maps as `u0` or `p`. A symbolic map is a `Dict` or `Vector{<:Pair}` mapping symbols in
+`u0` or `p` to their values. These values can be numeric, or expressions of other symbols.
+Symbolic maps can be complete (specifying a value for each symbol in `u0` or `p`) or
+partial. For a partial symbolic map, the values of remaining symbols are obtained through
+the system's defaults (see `SymbolicIndexingInterface.default_values`) and the existing
+values in the problem passed to `remake`.
+
+If the system's defaults contain an expression for the missing symbol, that expression
+will be used for the value (it is treated as a dependent initialization). Otherwise,
+the existing value of that symbol in the problem passed to `remake` is used.
+
+If `default_values = true` is passed as a keyword argument to `remake`, then the value
+contained in the system's defaults is always preferred over the value in the problem.
+
+For example, consider a problem `prob` with parameters `:a`, `:b`, `:c` having values
+`1.0`, `2.0`, `3.0` respectively. Let us also assume that the system contains the
+defaults `Dict(:a => :(2b), :c => 0.1)`. Then:
+
+  - `remake(prob; p = [:b => 2.0])` will result in the values `4.0`, `2.0`, `3.0` for
+    `:a`, `:b` and `:c` respectively. Note how the numeric default for `:c` was not
+    respected.
+  - `remake(prob; p = [:b => 2.0], use_defaults = true)` will result in the values `4.0`,
+    `2.0`, `1.0` for `:a`, `:b` and `:c` respectively.
+  - `remake(prob; p = [:b => 2.0, :a => 3.0])` will result in the values `3.0`, `2.0`,
+    `3.0` for `:a`, `:b` and `:c` respectively. Note how the explicitly specified value for
+    `:a` overrides the dependent default.
 
 ## Problem Traits
 
@@ -117,7 +146,8 @@ shows how to set the specialization default to `FullSpecialize`:
 
 ```julia
 using Preferences, UUIDs
-set_preferences!(UUID("0bca4576-84f4-4d90-8ffe-ffa030f20462"), "SpecializationLevel" => "FullSpecialize")
+set_preferences!(
+    UUID("0bca4576-84f4-4d90-8ffe-ffa030f20462"), "SpecializationLevel" => "FullSpecialize")
 ```
 
 The default is `AutoSpecialize`.

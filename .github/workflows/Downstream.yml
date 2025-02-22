@@ -14,13 +14,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version: [1,1.6]
+        julia-version: [1]
         os: [ubuntu-latest]
         package:
           - {user: SciML, repo: DelayDiffEq.jl, group: Interface}
           - {user: SciML, repo: DelayDiffEq.jl, group: Integrators}
           - {user: SciML, repo: DelayDiffEq.jl, group: Regression}
           - {user: SciML, repo: DiffEqBase.jl, group: Core}
+          - {user: SciML, repo: DiffEqDevTools.jl, group: Core}
           - {user: SciML, repo: DiffEqBase.jl, group: Downstream}
           - {user: SciML, repo: DiffEqBase.jl, group: Downstream2}
           - {user: SciML, repo: DiffEqFlux.jl, group: DiffEqFlux}
@@ -39,7 +40,7 @@ jobs:
           - {user: SciML, repo: Integrals.jl, group: All}
           - {user: SciML, repo: BoundaryValueDiffEq.jl, group: All}
           - {user: SciML, repo: ModelingToolkit.jl, group: All}
-          - {user: SciML, repo: ModelingToolkitStandardLibrary.jl, group: All}
+          - {user: SciML, repo: ModelingToolkitStandardLibrary.jl, group: Core}
           - {user: SciML, repo: StochasticDelayDiffEq.jl, group: All}
           - {user: SciML, repo: SimpleNonlinearSolve.jl, group: All}
           - {user: SciML, repo: SimpleDiffEq.jl, group: All}
@@ -48,10 +49,11 @@ jobs:
           - {user: SciML, repo: SciMLSensitivity.jl, group: Core3}
           - {user: SciML, repo: SciMLSensitivity.jl, group: Core4}
           - {user: SciML, repo: SciMLSensitivity.jl, group: Core5}
+          - {user: SciML, repo: Catalyst.jl, group: All}
 
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.julia-version }}
           arch: x64
@@ -62,7 +64,7 @@ jobs:
           repository: ${{ matrix.package.user }}/${{ matrix.package.repo }}
           path: downstream
       - name: Load this and run the downstream tests
-        shell: julia --color=yes --project=downstream {0}
+        shell: julia --color=yes --project=downstream --depwarn=yes {0}
         run: |
           using Pkg
           try
@@ -79,6 +81,8 @@ jobs:
             exit(0)  # Exit immediately, as a success
           end
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
         with:
-          file: lcov.info
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

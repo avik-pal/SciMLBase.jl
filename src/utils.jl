@@ -14,18 +14,20 @@ function numargs(f)
 end
 
 function numargs(f::RuntimeGeneratedFunctions.RuntimeGeneratedFunction{
-    T,
-    V,
-    W,
-    I,
+        T,
+        V,
+        W,
+        I
 }) where {
-    T,
-    V,
-    W,
-    I,
+        T,
+        V,
+        W,
+        I
 }
     (length(T),)
 end
+
+numargs(f::ComposedFunction) = numargs(f.inner)
 
 """
 $(SIGNATURES)
@@ -214,7 +216,9 @@ function Base.showerror(io::IO, e::FunctionArgumentsError)
 end
 
 """
-    isinplace(f, inplace_param_number[,fname="f"])
+    isinplace(f, inplace_param_number, fname = "f", iip_preferred = true;
+              has_two_dispatches = true,
+              outofplace_param_number = inplace_param_number - 1)
     isinplace(f::AbstractSciMLFunction[, inplace_param_number])
 
 Check whether a function operates in place by comparing its number of arguments
@@ -222,7 +226,8 @@ to the expected number. If `f` is an `AbstractSciMLFunction`, then the type
 parameter is assumed to be correct and is used. Otherwise `inplace_param_number`
 is checked against the methods table, where `inplace_param_number` is the number
 of arguments for the in-place dispatch. The out-of-place dispatch is assumed
-to have one less. If neither of these dispatches exist, an error is thrown.
+to have `outofplace_param_number` parameters (one less than the inplace version
+by default). If neither of these dispatches exist, an error is thrown.
 If the error is thrown, `fname` is used to tell the user which function has the
 incorrect dispatches.
 
@@ -235,28 +240,36 @@ dispatch, i.e. `f(u,p)` for OptimizationFunction, and thus the check for the oop
 form is disabled and the 2-argument signature is ensured to be matched.
 
 # See also
-* [`numargs`](@ref numargs)
+
+  - [`numargs`](@ref numargs)
 """
 function isinplace(f, inplace_param_number, fname = "f", iip_preferred = true;
-    has_two_dispatches = true, isoptimization = false)
+        has_two_dispatches = true, isoptimization = false,
+        outofplace_param_number = inplace_param_number - 1)
     nargs = numargs(f)
     iip_dispatch = any(x -> x == inplace_param_number, nargs)
-    oop_dispatch = any(x -> x == inplace_param_number - 1, nargs)
+    oop_dispatch = any(x -> x == outofplace_param_number, nargs)
 
     if length(nargs) == 0
         throw(NoMethodsError(fname))
     end
 
     if !iip_dispatch && !oop_dispatch && !isoptimization
-        if all(x -> x > inplace_param_number, nargs)
+        if all(>(inplace_param_number), nargs)
             throw(TooManyArgumentsError(fname, f))
-        elseif all(x -> x < inplace_param_number - 1, nargs) && has_two_dispatches
+        elseif all(<(outofplace_param_number), nargs) && has_two_dispatches
             # Possible extra safety?
             # Find if there's a `f(args...)` dispatch
             # If so, no error
+            _parameters = if methods(f).ms[1].sig isa UnionAll
+                Base.unwrap_unionall(methods(f).ms[1].sig).parameters
+            else
+                methods(f).ms[1].sig.parameters
+            end
+
             for i in 1:length(nargs)
                 if nargs[i] < inplace_param_number &&
-                   any(isequal(Vararg{Any}), methods(f).ms[1].sig.parameters)
+                   any(isequal(Vararg{Any}), _parameters)
                     # If varargs, assume iip
                     return iip_preferred
                 end
@@ -297,7 +310,7 @@ end
 
 isinplace(f::AbstractSciMLFunction{iip}) where {iip} = iip
 function isinplace(f::AbstractSciMLFunction{iip}, inplace_param_number,
-    fname = nothing) where {iip}
+        fname = nothing) where {iip}
     iip
 end
 
@@ -383,7 +396,7 @@ function add_kwonly(::Type{<:Val}, ex)
 end
 
 function add_kwonly(::Union{Type{Val{:function}},
-        Type{Val{:(=)}}}, ex::Expr)
+            Type{Val{:(=)}}}, ex::Expr)
     body = ex.args[2:end]  # function body
     default_call = ex.args[1]  # e.g., :(f(a, b=2; c=3))
     kwonly_call = add_kwonly(default_call)
@@ -493,3 +506,47 @@ end
 
 _unwrap_val(::Val{B}) where {B} = B
 _unwrap_val(B) = B
+
+"""
+    prepare_initial_state(u0) = u0
+
+Whenever an initial state is passed to the SciML ecosystem, is passed to
+`prepare_initial_state` and the result is used instead. If you define a
+type which cannot be used as a state but can be converted to something that
+can be, then you may define `prepare_initial_state(x::YourType) = ...`.
+
+!!! warning
+
+    This function is experimental and may be removed in the future.
+
+See also: `prepare_function`.
+"""
+prepare_initial_state(u0) = u0
+
+"""
+    prepare_function(f) = f
+
+Whenever a function is passed to the SciML ecosystem, is passed to
+`prepare_function` and the result is used instead. If you define a type which
+cannot be used as a function in the SciML ecosystem but can be converted to
+something that can be, then you may define `prepare_function(x::YourType) = ...`.
+
+`prepare_function` may be called before or after
+the arity of a function is computed with `numargs`
+
+!!! warning
+
+    This function is experimental and may be removed in the future.
+
+See also: `prepare_initial_state`.
+"""
+prepare_function(f) = f
+
+"""
+        strip_solution(sol)
+
+Strips a SciMLSolution object and its interpolation of their functions to better accommodate serialization.
+"""
+function strip_solution(sol::AbstractSciMLSolution)
+    sol
+end

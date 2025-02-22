@@ -23,12 +23,21 @@ function Base.summary(io::IO, prob::AbstractDEProblem)
         type_color, typeof(prob.u0),
         no_color, " and tType ",
         type_color,
-        typeof(prob.tspan) <: Function ?
+        prob.tspan isa Function ?
         "Unknown" : (prob.tspan === nothing ?
          "Nothing" : typeof(prob.tspan[1])),
-        no_color, ". In-place: ",
-        type_color, isinplace(prob),
-        no_color)
+        no_color,
+        ". In-place: ", type_color, isinplace(prob), no_color)
+    init = initialization_status(prob)
+    !isnothing(init) && begin 
+        println(io)
+        print(io, "Initialization status: ", type_color, initialization_status(prob), no_color)
+    end
+
+    hasproperty(prob.f, :mass_matrix) && begin
+        println(io)
+        print(io, "Non-trivial mass matrix: ", type_color, !(prob.f.mass_matrix isa LinearAlgebra.UniformScaling{Bool}), no_color)
+    end
 end
 
 function Base.summary(io::IO, prob::AbstractLinearProblem)
@@ -60,7 +69,7 @@ function Base.show(io::IO, mime::MIME"text/plain", A::AbstractNonlinearProblem)
     summary(io, A)
     println(io)
     print(io, "u0: ")
-    show(io, mime, A.u0)
+    show(io, mime, state_values(A))
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", A::IntervalNonlinearProblem)
@@ -149,11 +158,11 @@ into the AbstractSciMLProblem (e.x.: ODEProblem) but the parameters object `p` w
 expression (e.x. `p[i]`, or `x .+ p`). Two common reasons for this issue are:
 
 1. Forgetting to pass parameters into the problem constructor. For example, `ODEProblem(f,u0,tspan)` should
-be `ODEProblem(f,u0,tspan,p)` in order to use parameters.
+   be `ODEProblem(f,u0,tspan,p)` in order to use parameters.
 
 2. Using the wrong function signature. For example, with `ODEProblem`s the function signature is always
-`f(du,u,p,t)` for the in-place form or `f(u,p,t)` for the out-of-place form. Note that the `p` argument
-will always be in the function signature reguardless of if the problem is defined with parameters!
+   `f(du,u,p,t)` for the in-place form or `f(u,p,t)` for the out-of-place form. Note that the `p` argument
+   will always be in the function signature regardless of if the problem is defined with parameters!
 """
 
 struct NullParameterIndexError <: Exception end
@@ -180,3 +189,6 @@ function Base.summary(io::IO, prob::AbstractPDEProblem)
 end
 
 Base.copy(p::SciMLBase.NullParameters) = p
+
+SymbolicIndexingInterface.is_time_dependent(::AbstractDEProblem) = true
+SymbolicIndexingInterface.is_time_dependent(::AbstractNonlinearProblem) = false

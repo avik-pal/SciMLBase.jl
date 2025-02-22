@@ -1,7 +1,7 @@
 @doc doc"""
 
 Defines a discrete dynamical system problem.
-Documentation Page: https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/
+Documentation Page: [https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/](https://docs.sciml.ai/DiffEqDocs/stable/types/discrete_types/)
 
 ## Mathematical Specification of a ImplicitDiscrete Problem
 
@@ -81,29 +81,28 @@ struct ImplicitDiscreteProblem{uType, tType, isinplace, P, F, K} <:
     """ A callback to be applied to every solver which uses the problem."""
     kwargs::K
     @add_kwonly function ImplicitDiscreteProblem{iip}(f::ImplicitDiscreteFunction{
-            iip,
-        },
-        u0, tspan::Tuple,
-        p = NullParameters();
-        kwargs...) where {iip}
+                iip,
+            },
+            u0, tspan::Tuple,
+            p = NullParameters();
+            kwargs...) where {iip}
+        _u0 = prepare_initial_state(u0)
         _tspan = promote_tspan(tspan)
         warn_paramtype(p)
-        new{typeof(u0), typeof(_tspan), isinplace(f, 6),
+        new{typeof(_u0), typeof(_tspan), isinplace(f, 5),
             typeof(p),
             typeof(f), typeof(kwargs)}(f,
-            u0,
+            _u0,
             _tspan,
             p,
             kwargs)
     end
 
     function ImplicitDiscreteProblem{iip}(f, u0, tspan, p = NullParameters();
-        kwargs...) where {iip}
+            kwargs...) where {iip}
         ImplicitDiscreteProblem(ImplicitDiscreteFunction{iip}(f), u0, tspan, p; kwargs...)
     end
 end
-
-TruncatedStacktraces.@truncate_stacktrace ImplicitDiscreteProblem 3 1 2
 
 """
     ImplicitDiscreteProblem{isinplace}(f,u0,tspan,p=NullParameters(),callback=nothing)
@@ -111,12 +110,45 @@ TruncatedStacktraces.@truncate_stacktrace ImplicitDiscreteProblem 3 1 2
 Defines a discrete problem with the specified functions.
 """
 function ImplicitDiscreteProblem(f::ImplicitDiscreteFunction, u0, tspan::Tuple,
-    p = NullParameters(); kwargs...)
-    ImplicitDiscreteProblem{isinplace(f, 6)}(f, u0, tspan, p; kwargs...)
+        p = NullParameters(); kwargs...)
+    ImplicitDiscreteProblem{isinplace(f, 5)}(f, u0, tspan, p; kwargs...)
 end
 
 function ImplicitDiscreteProblem(f, u0, tspan, p = NullParameters();
-    kwargs...)
-    iip = isinplace(f, 6)
+        kwargs...)
+    iip = isinplace(f, 5)
     ImplicitDiscreteProblem(ImplicitDiscreteFunction{iip}(f), u0, tspan, p; kwargs...)
+end
+
+@doc doc"""
+
+Holds information on what variables to alias
+when solving an ODE. Conforms to the AbstractAliasSpecifier interface. 
+    `DiscreteAliasSpecifier(;alias_p = nothing, alias_f = nothing, alias_u0 = nothing, alias = nothing)`
+
+When a keyword argument is `nothing`, the default behaviour of the solver is used.
+
+### Keywords 
+* `alias_p::Union{Bool, Nothing}`
+* `alias_f::Union{Bool, Nothing}`
+* `alias_u0::Union{Bool, Nothing}`: alias the u0 array. Defaults to false .
+* `alias::Union{Bool, Nothing}`: sets all fields of the `ImplicitDiscreteAliasSpecifier` to `alias`
+
+"""
+struct ImplicitDiscreteAliasSpecifier
+    alias_p::Union{Bool, Nothing}
+    alias_f::Union{Bool, Nothing}
+    alias_u0::Union{Bool, Nothing}
+
+    function ImplicitDiscreteAliasSpecifier(;
+            alias_p = nothing, alias_f = nothing, alias_u0 = nothing,
+            alias_du0 = nothing, alias = nothing)
+        if alias == true
+            new(true, true, true)
+        elseif alias == false
+            new(false, false, false)
+        elseif isnothing(alias)
+            new(alias_p, alias_f, alias_u0)
+        end
+    end
 end

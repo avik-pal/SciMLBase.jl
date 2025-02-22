@@ -6,7 +6,7 @@ struct StandardSDEProblem end
 @doc doc"""
 
 Defines an stochastic differential equation (SDE) problem.
-Documentation Page: https://docs.sciml.ai/DiffEqDocs/stable/types/sde_types/
+Documentation Page: [https://docs.sciml.ai/DiffEqDocs/stable/types/sde_types/](https://docs.sciml.ai/DiffEqDocs/stable/types/sde_types/)
 
 ## Mathematical Specification of a SDE Problem
 
@@ -35,7 +35,7 @@ with initial condition `u0`.
 
 ### Constructors
 
-- `SDEProblem(f::SDEFunction,g,u0,tspan,p=NullParameters();noise=WHITE_NOISE,noise_rate_prototype=nothing)`
+- `SDEProblem(f::SDEFunction,u0,tspan,p=NullParameters();noise=WHITE_NOISE,noise_rate_prototype=nothing)`
 - `SDEProblem{isinplace,specialize}(f,g,u0,tspan,p=NullParameters();noise=WHITE_NOISE,noise_rate_prototype=nothing)` :
   Defines the SDE with the specified functions. The default noise is `WHITE_NOISE`.
   `isinplace` optionally sets whether the function is inplace or not. This is
@@ -94,41 +94,46 @@ struct SDEProblem{uType, tType, isinplace, P, NP, F, G, K, ND} <:
     kwargs::K
     noise_rate_prototype::ND
     seed::UInt64
-    @add_kwonly function SDEProblem{iip}(f::AbstractSDEFunction{iip}, g, u0,
-        tspan, p = NullParameters();
-        noise_rate_prototype = nothing,
-        noise = nothing, seed = UInt64(0),
-        kwargs...) where {iip}
+    @add_kwonly function SDEProblem{iip}(f::AbstractSDEFunction{iip}, u0,
+            tspan, p = NullParameters();
+            noise_rate_prototype = nothing,
+            noise = nothing, seed = UInt64(0),
+            kwargs...) where {iip}
+        _u0 = prepare_initial_state(u0)
         _tspan = promote_tspan(tspan)
         warn_paramtype(p)
-        new{typeof(u0), typeof(_tspan),
+        new{typeof(_u0), typeof(_tspan),
             isinplace(f), typeof(p),
             typeof(noise), typeof(f), typeof(f.g),
             typeof(kwargs),
-            typeof(noise_rate_prototype)}(f, f.g, u0, _tspan, p,
+            typeof(noise_rate_prototype)}(f, f.g, _u0, _tspan, p,
             noise, kwargs,
             noise_rate_prototype, seed)
     end
 
     function SDEProblem{iip}(f, g, u0, tspan, p = NullParameters(); kwargs...) where {iip}
-        SDEProblem(SDEFunction{iip}(f, g), g, u0, tspan, p; kwargs...)
+        SDEProblem(SDEFunction{iip}(f, g), u0, tspan, p; kwargs...)
     end
 end
 
-TruncatedStacktraces.@truncate_stacktrace SDEProblem 3 1 2
-
-#=
-function SDEProblem(f::AbstractSDEFunction,u0,tspan,p=NullParameters();kwargs...)
-  SDEProblem(f,f.g,u0,tspan,p;kwargs...)
-end
-=#
-
-function SDEProblem(f::AbstractSDEFunction, g, u0, tspan, p = NullParameters(); kwargs...)
-    SDEProblem{isinplace(f)}(f, g, u0, tspan, p; kwargs...)
+function SDEProblem(f::AbstractSDEFunction, u0, tspan, p = NullParameters(); kwargs...)
+    SDEProblem{isinplace(f)}(f, u0, tspan, p; kwargs...)
 end
 
 function SDEProblem(f, g, u0, tspan, p = NullParameters(); kwargs...)
-    SDEProblem(SDEFunction(f, g), g, u0, tspan, p; kwargs...)
+    iip = isinplace(f, 4)
+    SDEProblem{iip}(SDEFunction{iip}(f, g), u0, tspan, p; kwargs...)
+end
+
+function ConstructionBase.constructorof(::Type{P}) where {P <: SDEProblem}
+    function ctor(f, g, u0, tspan, p, noise, kw, noise_rate_prototype, seed)
+        if f isa AbstractSDEFunction
+            iip = isinplace(f)
+        else
+            iip = isinplace(f, 4)
+        end
+        return SDEProblem{iip}(f, g, u0, tspan, p; kw..., noise, noise_rate_prototype, seed)
+    end
 end
 
 """
@@ -141,28 +146,35 @@ $(TYPEDEF)
 """
 struct SplitSDEProblem{iip} <: AbstractSplitSDEProblem end
 # u' = Au + f
+#=
 function SplitSDEProblem(f1, f2, g, u0, tspan, p = NullParameters(); kwargs...)
     SplitSDEProblem(SplitSDEFunction(f1, f2, g), g, u0, tspan, p; kwargs...)
 end
-
-function SplitSDEProblem(f::SplitSDEFunction, g, u0, tspan, p = NullParameters(); kwargs...)
-    SplitSDEProblem{isinplace(f)}(f, g, u0, tspan, p; kwargs...)
+=#
+function SplitSDEProblem{iip}(
+        f1, f2, g, u0, tspan, p = NullParameters(); kwargs...) where {iip}
+    SplitSDEProblem{iip}(SplitSDEFunction(f1, f2, g), u0, tspan, p; kwargs...)
 end
 
-function SplitSDEProblem{iip}(f1, f2, g, u0, tspan, p = NullParameters();
-    kwargs...) where {iip}
-    SplitSDEProblem(SplitSDEFunction(f1, f2, g), g, u0, tspan, p; kwargs...)
+function SplitSDEProblem(f1, f2, g, u0, tspan, p = NullParameters(); kwargs...)
+    ff = SplitSDEFunction(f1, f2, g)
+    SplitSDEProblem{isinplace(ff)}(ff, u0, tspan, p; kwargs...)
 end
-function SplitSDEProblem{iip}(f::SplitSDEFunction, g, u0, tspan, p = NullParameters();
-    func_cache = nothing, kwargs...) where {iip}
-    if f.cache === nothing && iip
-        cache = similar(u0)
+
+function SplitSDEProblem(f::SplitSDEFunction, u0, tspan, p = NullParameters(); kwargs...)
+    SplitSDEProblem{isinplace(f)}(f, u0, tspan, p; kwargs...)
+end
+
+function SplitSDEProblem{iip}(f::SplitSDEFunction, u0, tspan, p = NullParameters();
+        _func_cache = nothing, kwargs...) where {iip}
+    if f._func_cache === nothing && iip
+        _func_cache = similar(u0)
         _f = SplitSDEFunction{iip}(f.f1, f.f2, f.g; mass_matrix = f.mass_matrix,
-            _func_cache = cache, analytic = f.analytic)
+            _func_cache = _func_cache, analytic = f.analytic)
     else
         _f = f
     end
-    SDEProblem(_f, g, u0, tspan, p; kwargs...)
+    SDEProblem(_f, u0, tspan, p; kwargs...)
 end
 
 """
@@ -176,27 +188,66 @@ $(TYPEDEF)
 struct DynamicalSDEProblem{iip} <: AbstractDynamicalSDEProblem end
 
 function DynamicalSDEProblem(f1, f2, g, v0, u0, tspan, p = NullParameters(); kwargs...)
-    DynamicalSDEProblem(DynamicalSDEFunction(f1, f2, g), g, v0, u0, tspan, p; kwargs...)
+    ff = DynamicalSDEFunction(f1, f2, g)
+    DynamicalSDEProblem{isinplace(ff)}(ff, v0, u0, tspan, p; kwargs...)
 end
 
-function DynamicalSDEProblem(f::DynamicalSDEFunction, g, v0, u0, tspan,
-    p = NullParameters(); kwargs...)
-    DynamicalSDEProblem{isinplace(f)}(f, g, v0, u0, tspan, p; kwargs...)
+function DynamicalSDEProblem{iip}(
+        f1, f2, g, v0, u0, tspan, p = NullParameters(); kwargs...) where {iip}
+    ff = DynamicalSDEFunction(f1, f2, g)
+    DynamicalSDEProblem{iip}(ff, v0, u0, tspan, p; kwargs...)
 end
 
-function DynamicalSDEProblem{iip}(f1, f2, g, v0, u0, tspan, p = NullParameters();
-    kwargs...) where {iip}
-    DynamicalSDEProblem(DynamicalSDEFunction(f1, f2, g), g, v0, u0, tspan, p; kwargs...)
+function DynamicalSDEProblem(f::DynamicalSDEFunction, v0, u0, tspan,
+        p = NullParameters(); kwargs...)
+    DynamicalSDEProblem{isinplace(f)}(f, v0, u0, tspan, p; kwargs...)
 end
-function DynamicalSDEProblem{iip}(f::DynamicalSDEFunction, g, v0, u0, tspan,
-    p = NullParameters();
-    func_cache = nothing, kwargs...) where {iip}
-    if f.cache === nothing && iip
-        cache = similar(u0)
+
+function DynamicalSDEProblem{iip}(f::DynamicalSDEFunction, v0, u0, tspan,
+        p = NullParameters();
+        _func_cache = nothing, kwargs...) where {iip}
+    if f._func_cache === nothing && iip
+        _func_cache = similar(u0)
         _f = DynamicalSDEFunction{iip}(f.f1, f.f2, f.g; mass_matrix = f.mass_matrix,
-            _func_cache = cache, analytic = f.analytic)
+            _func_cache = _func_cache, analytic = f.analytic)
     else
         _f = f
     end
-    SDEProblem(_f, g, ArrayPartition(v0, u0), tspan, p; kwargs...)
+    SDEProblem(_f, ArrayPartition(v0, u0), tspan, p; kwargs...)
+end
+
+@doc doc"""
+
+Holds information on what variables to alias
+when solving an SDEProblem. Conforms to the AbstractAliasSpecifier interface. 
+    `SDEAliasSpecifier(;alias_p = nothing, alias_f = nothing, alias_u0 = nothing, alias_tstops = nothing, alias = nothing)`
+
+When a keyword argument is `nothing`, the default behaviour of the solver is used.
+
+### Keywords 
+* `alias_p::Union{Bool, Nothing}`
+* `alias_f::Union{Bool, Nothing}`
+* `alias_u0::Union{Bool, Nothing}`: alias the u0 array. Defaults to false .
+* `alias_tstops::Union{Bool, Nothing}`: alias the tstops array
+* `alias_jumps::Union{Bool, Nothing}`: alias jump process if wrapped in a JumpProcess
+* `alias::Union{Bool, Nothing}`: sets all fields of the `SDEAliasSpecifier` to `alias`
+
+"""
+struct SDEAliasSpecifier <: AbstractAliasSpecifier
+    alias_p::Union{Bool, Nothing}
+    alias_f::Union{Bool, Nothing}
+    alias_u0::Union{Bool, Nothing}
+    alias_tstops::Union{Bool, Nothing}
+    alias_jumps::Union{Bool, Nothing}
+
+    function SDEAliasSpecifier(; alias_p = nothing, alias_f = nothing, alias_u0 = nothing,
+            alias_du0 = nothing, alias_tstops = nothing, alias_jumps = nothing, alias = nothing)
+        if alias == true
+            new(true, true, true, true, true)
+        elseif alias == false
+            new(false, false, false, false, false)
+        elseif isnothing(alias)
+            new(alias_p, alias_f, alias_u0, alias_tstops, alias_jumps)
+        end
+    end
 end
